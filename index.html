@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Zentrixa</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --tile-size: 10.5vw;
+            --max-tile: 45px;
+            --red: #ff4d4d; --blue: #4d94ff; --green: #4dff88; --yellow: #ffff4d; --purple: #d94dff;
+        }
+        body {
+            background: var(--bg);
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 10px;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        /* Start Screen */
+        #start-screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        #start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+            background: linear-gradient(45deg, var(--blue), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        #start-screen p {
+            color: #aaa;
+            margin-bottom: 30px;
+            font-size: 18px;
+        }
+        .btn {
+            background: white;
+            color: black;
+            border: none;
+            padding: 12px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255,255,255,0.2);
+        }
+
+        #ui-layer {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 5px 0;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        #best-layer {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+        #stats-layer {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            font-size: 20px;
+        }
+        #combo-layer {
+            height: 24px;
+            color: var(--green);
+            font-size: 18px;
+            margin-top: 5px;
+            font-style: italic;
+            transition: transform 0.2s;
+        }
+        #game-over-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #game-over-msg {
+            color: var(--red);
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #restart-btn {
+            background: white;
+            color: black;
+            border: none;
+            padding: 8px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        #game-container {
+            position: relative;
+            user-select: none;
+        }
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(8, min(var(--tile-size), var(--max-tile)));
+            grid-template-rows: repeat(12, min(var(--tile-size), var(--max-tile)));
+            gap: 4px;
+            background: #2a2a2a;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+
+        .loop-burst {
+            animation: loopBurst 0.25s ease-out;
+        }
+
+        @keyframes loopBurst {
+            0% { transform: scale(1); box-shadow: 0 10px 30px rgba(0,0,0,0.5); filter: brightness(1); }
+            50% { transform: scale(1.03); box-shadow: 0 0 40px rgba(255,255,255,0.6); filter: brightness(1.8); }
+            100% { transform: scale(1); box-shadow: 0 10px 30px rgba(0,0,0,0.5); filter: brightness(1); }
+        }
+
+        .tile {
+            width: min(var(--tile-size), var(--max-tile));
+            height: min(var(--tile-size), var(--max-tile));
+            border-radius: 50%;
+            transition: transform 0.1s, opacity 0.2s;
+            box-shadow: inset 0 -3px 6px rgba(0,0,0,0.3);
+        }
+        .tile.active { transform: scale(1.15); filter: brightness(1.3); outline: 2px solid white; outline-offset: 2px; z-index: 10; }
+        .tile.loop-active { outline: 3px solid #fff; filter: saturate(2) brightness(1.5); }
+        
+        .clearing { 
+            animation: popClear 0.25s forwards ease-out;
+            pointer-events: none;
+        }
+
+        @keyframes popClear {
+            0% { transform: scale(1); opacity: 1; }
+            40% { transform: scale(1.25); opacity: 1; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+        
+        #canvas-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            pointer-events: none;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <h1>Zentrixa</h1>
+    <p>Link colors. Create loops. Trigger cascades.</p>
+    <button id="start-btn" class="btn">START</button>
+</div>
+
+<div id="game-over-container">
+    <div id="game-over-msg">GAME OVER</div>
+    <button id="restart-btn">RESTART</button>
+</div>
+
+<div id="ui-layer">
+    <div id="best-layer">BEST: <span id="best-val">0</span></div>
+    <div id="stats-layer">
+        <div>SCORE: <span id="score-val">0</span></div>
+        <div>MOVES: <span id="moves-val">30</span></div>
+    </div>
+    <div id="combo-layer"></div>
+</div>
+
+<div id="game-container">
+    <div id="grid"></div>
+    <canvas id="canvas-overlay"></canvas>
+</div>
+
+<script>
+    const ROWS = 12, COLS = 8;
+    const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+    const gridElement = document.getElementById('grid');
+    const canvas = document.getElementById('canvas-overlay');
+    const scoreEl = document.getElementById('score-val');
+    const bestEl = document.getElementById('best-val');
+    const movesEl = document.getElementById('moves-val');
+    const comboEl = document.getElementById('combo-layer');
+    const gameOverContainer = document.getElementById('game-over-container');
+    const restartBtn = document.getElementById('restart-btn');
+    const startScreen = document.getElementById('start-screen');
+    const startBtn = document.getElementById('start-btn');
+    const ctx = canvas.getContext('2d');
+
+    let board = [];
+    let path = [];
+    let isDragging = false;
+    let isLoop = false;
+    let backtrackCount = 0;
+    let score = 0;
+    let moves = 30;
+    let comboMultiplier = 1;
+    let cascadeDepth = 0;
+    const MAX_CASCADE = 10;
+
+    let bestScore = 0;
+    const savedBest = localStorage.getItem('draglink_best_score');
+    if (savedBest) {
+        bestScore = parseInt(savedBest);
+        bestEl.innerText = bestScore;
+    }
+
+    function initBoard() {
+        gridElement.innerHTML = '';
+        board = [];
+        for (let r = 0; r < ROWS; r++) {
+            board[r] = [];
+            for (let c = 0; c < COLS; c++) {
+                const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+                board[r][c] = color;
+                const el = document.createElement('div');
+                el.className = 'tile';
+                el.style.backgroundColor = `var(--${color})`;
+                el.dataset.r = r; el.dataset.c = c;
+                gridElement.appendChild(el);
+            }
+        }
+        setTimeout(resizeCanvas, 100);
+    }
+
+    function resetGame() {
+        score = 0;
+        moves = 30;
+        comboMultiplier = 1;
+        cascadeDepth = 0;
+        scoreEl.innerText = score;
+        movesEl.innerText = moves;
+        comboEl.innerText = '';
+        gameOverContainer.style.display = 'none';
+        initBoard();
+    }
+
+    function resizeCanvas() {
+        canvas.width = gridElement.offsetWidth;
+        canvas.height = gridElement.offsetHeight;
+    }
+
+    function getTileEl(r, c) { return gridElement.children[r * COLS + c]; }
+
+    function handleMove(e) {
+        if (!isDragging || moves <= 0) return;
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        const target = document.elementFromPoint(x, y);
+
+        if (target && target.classList.contains('tile')) {
+            const r = parseInt(target.dataset.r);
+            const c = parseInt(target.dataset.c);
+            addStep(r, c);
+        }
+    }
+
+    function addStep(r, c) {
+        const last = path[path.length - 1];
+        if (last.r === r && last.c === c) return;
+        if (board[r][c] !== board[last.r][last.c]) return;
+        
+        if (Math.abs(r - last.r) > 1 || Math.abs(c - last.c) > 1) return;
+
+        if (path.length >= 2) {
+            const prev = path[path.length - 2];
+            if (prev.r === r && prev.c === c) {
+                if (backtrackCount < 2) {
+                    const removed = path.pop();
+                    getTileEl(removed.r, removed.c).classList.remove('active', 'loop-active');
+                    backtrackCount++;
+                    checkLoop();
+                    drawPath();
+                }
+                return;
+            }
+        }
+
+        const existingIdx = path.findIndex(p => p.r === r && p.c === c);
+        if (existingIdx !== -1) {
+            isLoop = true;
+        }
+
+        path.push({r, c});
+        getTileEl(r, c).classList.add('active');
+        checkLoop();
+        drawPath();
+    }
+
+    function checkLoop() {
+        const seen = new Set();
+        let loopFound = false;
+        for (const p of path) {
+            const id = `${p.r},${p.c}`;
+            if (seen.has(id)) { loopFound = true; break; }
+            seen.add(id);
+        }
+        isLoop = loopFound;
+        path.forEach(p => getTileEl(p.r, p.c).classList.toggle('loop-active', isLoop));
+    }
+
+    function resolveMatch() {
+        if (!isDragging) return;
+        if (path.length < 2) return resetPath();
+
+        moves = Math.max(0, moves - 1);
+        movesEl.innerText = moves;
+
+        let toClear = [];
+        if (isLoop) {
+            gridElement.classList.add('loop-burst');
+            setTimeout(() => {
+                gridElement.classList.remove('loop-burst');
+            }, 250);
+
+            const color = board[path[0].r][path[0].c];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c] === color) toClear.push({r, c});
+                }
+            }
+            score += toClear.length * 15 * comboMultiplier;
+        } else {
+            toClear = [...path];
+            score += (path.length * 10) * comboMultiplier;
+        }
+
+        scoreEl.innerText = score;
+
+        toClear.forEach(p => {
+            getTileEl(p.r, p.c).classList.add('clearing');
+            board[p.r][p.c] = null;
+        });
+
+        setTimeout(cascade, 250);
+        resetPath();
+
+        if (moves <= 0) {
+            if (score > bestScore) {
+                bestScore = score;
+                bestEl.innerText = bestScore;
+                localStorage.setItem('draglink_best_score', bestScore.toString());
+            }
+            gameOverContainer.style.display = 'flex';
+        }
+    }
+
+    function cascade() {
+        for (let c = 0; c < COLS; c++) {
+            let empty = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r][c] === null) empty++;
+                else if (empty > 0) {
+                    board[r + empty][c] = board[r][c];
+                    board[r][c] = null;
+                }
+            }
+            for (let r = 0; r < empty; r++) {
+                board[r][c] = COLORS[Math.floor(Math.random() * COLORS.length)];
+            }
+        }
+        renderBoard();
+        checkCascadingMatches();
+    }
+
+    function checkCascadingMatches() {
+        if (cascadeDepth >= MAX_CASCADE) return;
+
+        let matches = [];
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS - 2; c++) {
+                let color = board[r][c];
+                if (color && board[r][c+1] === color && board[r][c+2] === color) {
+                    matches.push({r:r, c:c});
+                    matches.push({r:r, c:c+1});
+                    matches.push({r:r, c:c+2});
+                }
+            }
+        }
+        for (let c = 0; c < COLS; c++) {
+            for (let r = 0; r < ROWS - 2; r++) {
+                let color = board[r][c];
+                if (color && board[r+1][c] === color && board[r+2][c] === color) {
+                    matches.push({r:r, c:c});
+                    matches.push({r:r+1, c:c});
+                    matches.push({r:r+2, c:c});
+                }
+            }
+        }
+
+        if (matches.length > 0) {
+            cascadeDepth++;
+            comboMultiplier++;
+            comboEl.innerText = `COMBO x${comboMultiplier}!`;
+            comboEl.style.transform = 'scale(1.2)';
+            setTimeout(() => comboEl.style.transform = 'scale(1)', 150);
+
+            let unique = Array.from(new Set(matches.map(m => `${m.r},${m.c}`))).map(s => {
+                let [r, c] = s.split(',').map(Number);
+                return {r, c};
+            });
+
+            score += unique.length * 20 * comboMultiplier;
+            scoreEl.innerText = score;
+
+            unique.forEach(p => {
+                const el = getTileEl(p.r, p.c);
+                if (el) el.classList.add('clearing');
+                board[p.r][p.c] = null;
+            });
+            setTimeout(cascade, 300);
+        }
+    }
+
+    function renderBoard() {
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                const el = getTileEl(r, c);
+                el.className = 'tile';
+                el.style.backgroundColor = `var(--${board[r][c]})`;
+            }
+        }
+    }
+
+    function resetPath() {
+        path.forEach(p => {
+            const el = getTileEl(p.r, p.c);
+            if (el) el.classList.remove('active', 'loop-active');
+        });
+        path = [];
+        isLoop = false;
+        isDragging = false;
+        backtrackCount = 0;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawPath() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (path.length < 2) return;
+        ctx.beginPath();
+        ctx.strokeStyle = isLoop ? 'white' : 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        path.forEach((p, i) => {
+            const el = getTileEl(p.r, p.c);
+            const x = el.offsetLeft + el.offsetWidth / 2;
+            const y = el.offsetTop + el.offsetHeight / 2;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
+    function startDrag(e) {
+        if (moves <= 0 || gameOverContainer.style.display === 'flex') return;
+        
+        comboMultiplier = 1;
+        cascadeDepth = 0;
+        comboEl.innerText = '';
+
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        const target = document.elementFromPoint(x, y);
+        if (target && target.classList.contains('tile')) {
+            isDragging = true;
+            const r = parseInt(target.dataset.r), c = parseInt(target.dataset.c);
+            path = [{r, c}];
+            target.classList.add('active');
+            backtrackCount = 0;
+        }
+    }
+
+    gridElement.addEventListener('mousedown', startDrag);
+    gridElement.addEventListener('touchstart', startDrag);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, {passive: false});
+    window.addEventListener('mouseup', resolveMatch);
+    window.addEventListener('touchend', resolveMatch);
+    
+    restartBtn.addEventListener('click', resetGame);
+
+    startBtn.addEventListener('click', () => {
+        startScreen.style.display = 'none';
+        initBoard();
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>
+
+
