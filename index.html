@@ -345,7 +345,7 @@
                     if (board[r][c] === color) toClear.push({r, c});
                 }
             }
-            score += toClear.length * 15 * comboMultiplier;
+            score += toClear.length * 25 * comboMultiplier;
         } else {
             toClear = [...path];
             score += (path.length * 10) * comboMultiplier;
