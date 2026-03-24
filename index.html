@@ -333,23 +333,32 @@
         movesEl.innerText = moves;
 
         let toClear = [];
-        if (isLoop) {
-            gridElement.classList.add('loop-burst');
-            setTimeout(() => {
-                gridElement.classList.remove('loop-burst');
-            }, 250);
+if (isLoop) {
+    gridElement.classList.add('loop-burst');
+    setTimeout(() => {
+        gridElement.classList.remove('loop-burst');
+    }, 250);
 
-            const color = board[path[0].r][path[0].c];
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    if (board[r][c] === color) toClear.push({r, c});
-                }
-            }
-            score += toClear.length * 25 * comboMultiplier;
-        } else {
-            toClear = [...path];
-            score += (path.length * 10) * comboMultiplier;
+    const color = board[path[0].r][path[0].c];
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (board[r][c] === color) toClear.push({r, c});
         }
+    }
+
+    score += toClear.length * 25 * comboMultiplier;
+
+    // EXTRA MOVE FOR BIG LOOPS
+    if (toClear.length >= 12) {
+        moves += 1;
+        movesEl.innerText = moves;
+        comboEl.innerText = "+1 MOVE!";
+    }
+
+} else {
+    toClear = [...path];
+    score += (path.length * 10) * comboMultiplier;
+}
 
         scoreEl.innerText = score;
 
