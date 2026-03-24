@@ -18,6 +18,8 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
+            height: 100vh;
             margin: 0;
             padding: 10px;
             touch-action: none;
@@ -223,7 +225,7 @@
     const MAX_CASCADE = 10;
 
     let bestScore = 0;
-    const savedBest = localStorage.getItem('draglink_best_score');
+    const savedBest = localStorage.getItem('zentrixa_best_score');
     if (savedBest) {
         bestScore = parseInt(savedBest);
         bestEl.innerText = bestScore;
@@ -363,7 +365,7 @@
             if (score > bestScore) {
                 bestScore = score;
                 bestEl.innerText = bestScore;
-                localStorage.setItem('draglink_best_score', bestScore.toString());
+                localStorage.setItem('zentrixa_best_score', bestScore.toString());
             }
             gameOverContainer.style.display = 'flex';
         }
@@ -513,5 +515,4 @@
 </script>
 </body>
 </html>
-
 
