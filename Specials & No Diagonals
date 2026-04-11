@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Zentrixa</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --tile-size: 10.5vw;
+            --max-tile: 45px;
+            --red: #ff4d4d; --blue: #4d94ff; --green: #4dff88; --yellow: #ffff4d; --purple: #d94dff;
+        }
+        body {
+            background: var(--bg);
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 10px;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        #start-screen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: var(--bg);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        #start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+            background: linear-gradient(45deg, var(--blue), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        #start-screen p {
+            color: #aaa;
+            margin-bottom: 16px;
+            font-size: 18px;
+        }
+        #start-screen .legend {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 24px;
+            line-height: 2;
+        }
+        .btn {
+            background: white;
+            color: black;
+            border: none;
+            padding: 12px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255,255,255,0.2);
+        }
+
+        #ui-layer {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 5px 0;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        #best-layer { font-size: 14px; color: #aaa; margin-bottom: 4px; }
+        #stats-layer { width: 100%; display: flex; justify-content: space-around; font-size: 20px; }
+        #combo-layer {
+            height: 24px;
+            color: var(--green);
+            font-size: 18px;
+            margin-top: 5px;
+            font-style: italic;
+            transition: transform 0.2s;
+        }
+        #game-over-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #game-over-msg { color: var(--red); font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+        #restart-btn {
+            background: white; color: black; border: none;
+            padding: 8px 20px; font-size: 16px; font-weight: bold;
+            border-radius: 20px; cursor: pointer;
+        }
+        #game-container { position: relative; user-select: none; }
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(8, min(var(--tile-size), var(--max-tile)));
+            grid-template-rows: repeat(12, min(var(--tile-size), var(--max-tile)));
+            gap: 4px;
+            background: #2a2a2a;
+            padding: 6px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+
+        .loop-burst { animation: loopBurst 0.25s ease-out; }
+        @keyframes loopBurst {
+            0%   { transform: scale(1);    box-shadow: 0 10px 30px rgba(0,0,0,0.5); filter: brightness(1); }
+            50%  { transform: scale(1.03); box-shadow: 0 0 40px rgba(255,255,255,0.6); filter: brightness(1.8); }
+            100% { transform: scale(1);    box-shadow: 0 10px 30px rgba(0,0,0,0.5); filter: brightness(1); }
+        }
+
+        .tile {
+            width: min(var(--tile-size), var(--max-tile));
+            height: min(var(--tile-size), var(--max-tile));
+            border-radius: 50%;
+            transition: transform 0.1s, opacity 0.2s;
+            box-shadow: inset 0 -3px 6px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .tile.active      { transform: scale(1.15); filter: brightness(1.3); outline: 2px solid white; outline-offset: 2px; z-index: 10; }
+        .tile.loop-active { outline: 3px solid #fff; filter: saturate(2) brightness(1.5); }
+
+        /* ─── SPECIAL TILE VISUALS ───────────────────────────────────────────
+           Storage: board[r][c] = { color, special? }
+           All specials share a white pulsing glow ring.
+           Each type adds its own inner gradient and emoji icon via ::after.
+        */
+        .tile.special {
+            box-shadow:
+                0 0 0 3px rgba(255,255,255,0.9),
+                0 0 14px 5px rgba(255,255,255,0.35),
+                inset 0 -3px 6px rgba(0,0,0,0.3);
+            animation: specialPulse 1.8s ease-in-out infinite;
+        }
+        @keyframes specialPulse {
+            0%, 100% { filter: brightness(1.1) saturate(1.2); }
+            50%       { filter: brightness(1.6) saturate(2); }
+        }
+
+        /* Bomb: red core glow + 💥 */
+        .tile.special-bomb {
+            background-image: radial-gradient(circle at center, rgba(255,60,60,0.5) 0%, transparent 70%);
+        }
+        .tile.special-bomb::after {
+            content: "💥";
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px; pointer-events: none;
+        }
+
+        /* Color Clear: cyan glow + ✨ */
+        .tile.special-colorclear {
+            background-image: radial-gradient(circle at center, rgba(60,255,210,0.5) 0%, transparent 70%);
+        }
+        .tile.special-colorclear::after {
+            content: "✨";
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px; pointer-events: none;
+        }
+
+        /* Wild Extender: gold glow + 🔗 */
+        .tile.special-wildextend {
+            background-image: radial-gradient(circle at center, rgba(255,215,60,0.5) 0%, transparent 70%);
+        }
+        .tile.special-wildextend::after {
+            content: "🔗";
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px; pointer-events: none;
+        }
+
+        /* Active special in path: extra bright */
+        .tile.special.active {
+            box-shadow:
+                0 0 0 3px #fff,
+                0 0 22px 10px rgba(255,255,255,0.7),
+                inset 0 -3px 6px rgba(0,0,0,0.3);
+            filter: brightness(1.9) saturate(2.2) !important;
+        }
+
+        .clearing {
+            animation: popClear 0.25s forwards ease-out;
+            pointer-events: none;
+        }
+        @keyframes popClear {
+            0%   { transform: scale(1);    opacity: 1; }
+            40%  { transform: scale(1.25); opacity: 1; }
+            100% { transform: scale(0);    opacity: 0; }
+        }
+
+        #canvas-overlay {
+            position: absolute; top: 0; left: 0;
+            pointer-events: none; z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <h1>Zentrixa</h1>
+    <p>Link colors. Create loops. Trigger cascades.</p>
+    <div class="legend">
+        💥 <strong>Bomb</strong> — clears 3×3 area around it<br>
+        ✨ <strong>Color Clear</strong> — removes all tiles of that color<br>
+        🔗 <strong>Wild Extender</strong> — one free color transition
+    </div>
+    <button id="start-btn" class="btn">START</button>
+</div>
+
+<div id="game-over-container">
+    <div id="game-over-msg">GAME OVER</div>
+    <button id="restart-btn">RESTART</button>
+</div>
+
+<div id="ui-layer">
+    <div id="best-layer">BEST: <span id="best-val">0</span></div>
+    <div id="stats-layer">
+        <div>SCORE: <span id="score-val">0</span></div>
+        <div>MOVES: <span id="moves-val">30</span></div>
+    </div>
+    <div id="combo-layer"></div>
+</div>
+
+<div id="game-container">
+    <div id="grid"></div>
+    <canvas id="canvas-overlay"></canvas>
+</div>
+
+<script>
+    const ROWS = 12, COLS = 8;
+    const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+
+    // ─── SPECIAL TILE SYSTEM ─────────────────────────────────────────────────
+    //
+    // HOW SPECIAL TILES ARE STORED
+    // ─────────────────────────────
+    // board[r][c] is an object: { color: string, special?: string }
+    //   - color  : the tile's visual color (used for matching normal tiles)
+    //   - special: one of 'bomb' | 'colorclear' | 'wildextend' (or absent)
+    //
+    // Special tiles are wildcards for entry — their color does NOT gate
+    // whether the player can step on them during a drag.
+    //
+    // HOW "ONE TRANSITION PER SPECIAL TILE" IS ENFORCED
+    // ───────────────────────────────────────────────────
+    // currentChainColor: tracks the active required color for the chain.
+    // pendingTransitionSpecial: key "r,c" of the last special tile stepped on
+    //   that has not yet consumed its transition.
+    // usedTransitionTiles: Set of "r,c" keys for special tiles that have
+    //   already caused one color transition this drag. Once added here,
+    //   that special tile CANNOT trigger another transition.
+    //
+    // Flow on entry to a special tile:
+    //   → pendingTransitionSpecial = "r,c"   (transition now available)
+    //
+    // Flow on entry to the NEXT normal tile:
+    //   → if pendingTransitionSpecial is set AND not in usedTransitionTiles
+    //     AND the tile's color ≠ currentChainColor:
+    //       usedTransitionTiles.add(pendingTransitionSpecial)
+    //       currentChainColor = newColor          (one transition consumed)
+    //   → pendingTransitionSpecial = null         (pending slot cleared)
+    //
+    // This guarantees each special tile provides at most one color switch.
+    //
+    // HOW EFFECTS TRIGGER IN resolveMatch()
+    // ───────────────────────────────────────
+    // After determining the base toClear set (loop or path), we scan path
+    // for special tiles and expand toClear per type:
+    //   bomb       → add all cells in 3×3 area around tile
+    //   colorclear → add all board cells matching that tile's color
+    //   wildextend → no board effect (transition-only)
+    // After dedup, score, then call cascade(spawnPositions).
+
+    const SPECIAL_TYPES = ['bomb', 'colorclear', 'wildextend'];
+
+    // Returns how many special tiles to spawn for a given chain length
+    function specialSpawnCount(chainLen) {
+        if (chainLen >= 9) return 3;
+        if (chainLen >= 7) return 2;
+        if (chainLen >= 5) return 1;
+        return 0;
+    }
+
+    const gridElement = document.getElementById('grid');
+    const canvas      = document.getElementById('canvas-overlay');
+    const scoreEl     = document.getElementById('score-val');
+    const bestEl      = document.getElementById('best-val');
+    const movesEl     = document.getElementById('moves-val');
+    const comboEl     = document.getElementById('combo-layer');
+    const gameOverContainer = document.getElementById('game-over-container');
+    const restartBtn  = document.getElementById('restart-btn');
+    const startScreen = document.getElementById('start-screen');
+    const startBtn    = document.getElementById('start-btn');
+    const ctx         = canvas.getContext('2d');
+
+    let board = [];          // board[r][c] = { color, special? } | null
+    let path  = [];          // [{r,c}, ...] current drag path
+    let isDragging   = false;
+    let isLoop       = false;
+    let backtrackCount = 0;
+    let score        = 0;
+    let moves        = 30;
+    let comboMultiplier = 1;
+    let cascadeDepth    = 0;
+    const MAX_CASCADE   = 10;
+
+    // Chain color tracking (see header comment)
+    let currentChainColor       = null;
+    let pendingTransitionSpecial = null;  // "r,c" key | null
+    let usedTransitionTiles     = new Set();
+
+    let bestScore = 0;
+    const savedBest = localStorage.getItem('zentrixa_best_score');
+    if (savedBest) { bestScore = parseInt(savedBest); bestEl.innerText = bestScore; }
+
+    // ─── BOARD INIT ──────────────────────────────────────────────────────────
+    function initBoard() {
+        gridElement.innerHTML = '';
+        board = [];
+        for (let r = 0; r < ROWS; r++) {
+            board[r] = [];
+            for (let c = 0; c < COLS; c++) {
+                const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+                board[r][c] = { color };
+                gridElement.appendChild(buildTileEl(r, c));
+            }
+        }
+        setTimeout(resizeCanvas, 100);
+    }
+
+    function buildTileEl(r, c) {
+        const cell = board[r][c];
+        const el = document.createElement('div');
+        el.className = 'tile';
+        el.style.backgroundColor = `var(--${cell.color})`;
+        el.dataset.r = r; el.dataset.c = c;
+        applySpecialClasses(el, cell);
+        return el;
+    }
+
+    function applySpecialClasses(el, cell) {
+        el.classList.remove('special', 'special-bomb', 'special-colorclear', 'special-wildextend');
+        if (cell && cell.special) {
+            el.classList.add('special', `special-${cell.special}`);
+        }
+    }
+
+    function resetGame() {
+        score = 0; moves = 30; comboMultiplier = 1; cascadeDepth = 0;
+        scoreEl.innerText = score; movesEl.innerText = moves;
+        comboEl.innerText = '';
+        gameOverContainer.style.display = 'none';
+        initBoard();
+    }
+
+    // FIX: Redraw path after resize so it doesn't vanish on window resize
+    function resizeCanvas() {
+        canvas.width  = gridElement.offsetWidth;
+        canvas.height = gridElement.offsetHeight;
+        drawPath();
+    }
+
+    function getTileEl(r, c) { return gridElement.children[r * COLS + c]; }
+
+    // ─── START DRAG ──────────────────────────────────────────────────────────
+    function startDrag(e) {
+        if (moves <= 0 || gameOverContainer.style.display === 'flex') return;
+
+        // FIX: reset cascade/combo state at start of new drag
+        comboMultiplier = 1; cascadeDepth = 0; comboEl.innerText = '';
+
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        const target = document.elementFromPoint(x, y);
+        if (target && target.classList.contains('tile')) {
+            isDragging = true;
+            const r = parseInt(target.dataset.r), c = parseInt(target.dataset.c);
+            path = [{ r, c }];
+            target.classList.add('active');
+            backtrackCount = 0;
+            currentChainColor        = board[r][c].color;
+            pendingTransitionSpecial = null;
+            usedTransitionTiles      = new Set();
+        }
+    }
+
+    // FIX: Orthogonal-only movement — no diagonals
+    function isOrthogonallyAdjacent(r1, c1, r2, c2) {
+        const dr = Math.abs(r1 - r2), dc = Math.abs(c1 - c2);
+        return (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+    }
+
+    // ─── DRAG MOVE ───────────────────────────────────────────────────────────
+    function handleMove(e) {
+        if (!isDragging || moves <= 0) return;
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        const target = document.elementFromPoint(x, y);
+        if (target && target.classList.contains('tile')) {
+            addStep(parseInt(target.dataset.r), parseInt(target.dataset.c));
+        }
+    }
+
+    // ─── ADD STEP ────────────────────────────────────────────────────────────
+    function addStep(r, c) {
+        const last = path[path.length - 1];
+        if (last.r === r && last.c === c) return;
+
+        // FIX: orthogonal only
+        if (!isOrthogonallyAdjacent(last.r, last.c, r, c)) return;
+
+        const cell = board[r][c];
+        const isSpecial = !!cell.special;
+
+        // COLOR GATE
+        // Special tiles: wildcard — always enterable (no color restriction).
+        // Normal tiles: must match currentChainColor.
+        if (!isSpecial && cell.color !== currentChainColor) return;
+
+        // BACKTRACK (up to 2 steps)
+        if (path.length >= 2) {
+            const prev = path[path.length - 2];
+            if (prev.r === r && prev.c === c) {
+                if (backtrackCount < 2) {
+                    const removed = path.pop();
+                    getTileEl(removed.r, removed.c).classList.remove('active', 'loop-active');
+                    backtrackCount++;
+                    recomputeChainColor(); // keep color state consistent after backtrack
+                    checkLoop(); drawPath();
+                }
+                return;
+            }
+        }
+
+        // FIX: Loop detection — only trigger if path.length >= 4 AND tile is revisited
+        const existingIdx = path.findIndex(p => p.r === r && p.c === c);
+        if (existingIdx !== -1 && path.length >= 4) isLoop = true;
+
+        // COLOR TRANSITION via special tile (one transition per tile)
+        // ─────────────────────────────────────────────────────────────────────
+        // Special tile stepped on: open a pending transition slot.
+        // Next normal tile: if slot is open and color differs, consume the slot
+        // for one color switch and update currentChainColor.
+        if (isSpecial) {
+            pendingTransitionSpecial = `${r},${c}`;
+        } else {
+            if (pendingTransitionSpecial !== null &&
+                !usedTransitionTiles.has(pendingTransitionSpecial) &&
+                cell.color !== currentChainColor) {
+                usedTransitionTiles.add(pendingTransitionSpecial); // consume — no further switch from this tile
+                currentChainColor = cell.color;
+            }
+            pendingTransitionSpecial = null; // slot consumed by this normal tile
+        }
+
+        path.push({ r, c });
+        getTileEl(r, c).classList.add('active');
+        checkLoop(); drawPath();
+    }
+
+    // Replay path from scratch to recompute currentChainColor after backtrack.
+    function recomputeChainColor() {
+        if (path.length === 0) return;
+        currentChainColor        = board[path[0].r][path[0].c].color;
+        usedTransitionTiles      = new Set();
+        pendingTransitionSpecial = null;
+        for (let i = 1; i < path.length; i++) {
+            const { r, c } = path[i];
+            const cell = board[r][c];
+            if (cell.special) {
+                pendingTransitionSpecial = `${r},${c}`;
+            } else {
+                if (pendingTransitionSpecial !== null &&
+                    !usedTransitionTiles.has(pendingTransitionSpecial) &&
+                    cell.color !== currentChainColor) {
+                    usedTransitionTiles.add(pendingTransitionSpecial);
+                    currentChainColor = cell.color;
+                }
+                pendingTransitionSpecial = null;
+            }
+        }
+    }
+
+    // FIX: Loop only valid if path.length >= 4 AND a tile is genuinely revisited
+    function checkLoop() {
+        if (path.length < 4) {
+            isLoop = false;
+            path.forEach(p => getTileEl(p.r, p.c).classList.remove('loop-active'));
+            return;
+        }
+        const seen = new Set();
+        let loopFound = false;
+        for (const p of path) {
+            const id = `${p.r},${p.c}`;
+            if (seen.has(id)) { loopFound = true; break; }
+            seen.add(id);
+        }
+        isLoop = loopFound;
+        path.forEach(p => getTileEl(p.r, p.c).classList.toggle('loop-active', isLoop));
+    }
+
+    // ─── RESOLVE MATCH ───────────────────────────────────────────────────────
+    // HOW EFFECTS TRIGGER:
+    //   1. Build base toClear (loop → entire color, else → path tiles)
+    //   2. For each special tile in path, expand toClear by its effect:
+    //        bomb       → 3×3 area
+    //        colorclear → all tiles of that tile's color
+    //        wildextend → (no board effect)
+    //   3. Deduplicate toClear
+    //   4. Calculate spawnCount from path.length, pick random cleared positions
+    //   5. Animate clear, then cascade(spawnPositions)
+    function resolveMatch() {
+        if (!isDragging) return;
+        pendingTransitionSpecial = null;
+        if (path.length < 2) return resetPath();
+
+        moves = Math.max(0, moves - 1);
+        movesEl.innerText = moves;
+
+        const startColor = board[path[0].r][path[0].c].color;
+        let toClear = [];
+
+        if (isLoop) {
+            gridElement.classList.add('loop-burst');
+            setTimeout(() => gridElement.classList.remove('loop-burst'), 250);
+            for (let r = 0; r < ROWS; r++)
+                for (let c = 0; c < COLS; c++)
+                    if (board[r][c] && board[r][c].color === startColor) toClear.push({ r, c });
+            score += toClear.length * 25 * comboMultiplier;
+            if (toClear.length >= 12) { moves += 1; movesEl.innerText = moves; comboEl.innerText = '+1 MOVE!'; }
+        } else {
+            toClear = [...path];
+            score += path.length * 10 * comboMultiplier;
+        }
+
+        // Apply special tile board effects
+        const pathSpecials = path.filter(p => board[p.r] && board[p.r][p.c] && board[p.r][p.c].special);
+        for (const sp of pathSpecials) {
+            const cell = board[sp.r][sp.c];
+            if (!cell) continue;
+            if (cell.special === 'bomb') {
+                // Bomb: clear 3×3 area
+                for (let dr = -1; dr <= 1; dr++)
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = sp.r + dr, nc = sp.c + dc;
+                        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) toClear.push({ r: nr, c: nc });
+                    }
+            } else if (cell.special === 'colorclear') {
+                // Color Clear: remove all tiles of this tile's own color
+                const target = cell.color;
+                for (let r = 0; r < ROWS; r++)
+                    for (let c = 0; c < COLS; c++)
+                        if (board[r][c] && board[r][c].color === target) toClear.push({ r, c });
+            }
+            // wildextend: no board effect — transition only (handled during drag)
+        }
+
+        // Deduplicate
+        const seen = new Set();
+        toClear = toClear.filter(p => {
+            const k = `${p.r},${p.c}`;
+            if (seen.has(k)) return false;
+            seen.add(k); return true;
+        });
+
+        scoreEl.innerText = score;
+
+        // SPAWN SPECIAL TILES
+        // Count based on player's drawn path length (not total cleared area).
+        // Strictly capped — no extra randomness beyond type assignment.
+        const spawnCount = specialSpawnCount(path.length);
+        let spawnPositions = [];
+        if (spawnCount > 0 && toClear.length > 0) {
+            const shuffled = [...toClear].sort(() => Math.random() - 0.5);
+            spawnPositions = shuffled.slice(0, Math.min(spawnCount, shuffled.length))
+                                     .map(p => `${p.r},${p.c}`);
+        }
+
+        // Animate & null out board
+        toClear.forEach(p => {
+            const el = getTileEl(p.r, p.c);
+            if (el) el.classList.add('clearing');
+            board[p.r][p.c] = null;
+        });
+
+        setTimeout(() => cascade(spawnPositions), 250);
+        resetPath();
+
+        if (moves <= 0) {
+            if (score > bestScore) {
+                bestScore = score;
+                bestEl.innerText = bestScore;
+                localStorage.setItem('zentrixa_best_score', bestScore.toString());
+            }
+            gameOverContainer.style.display = 'flex';
+        }
+    }
+
+    // ─── CASCADE ─────────────────────────────────────────────────────────────
+    // spawnKeys: array of "r,c" strings for positions that should become
+    // special tiles after gravity fills new tiles in.
+    function cascade(spawnKeys = []) {
+        // Gravity: tiles fall down, top fills with new tiles
+        for (let c = 0; c < COLS; c++) {
+            let empty = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r][c] === null) empty++;
+                else if (empty > 0) { board[r + empty][c] = board[r][c]; board[r][c] = null; }
+            }
+            for (let r = 0; r < empty; r++)
+                board[r][c] = { color: COLORS[Math.floor(Math.random() * COLORS.length)] };
+        }
+
+        // Promote tiles to special (one per spawn slot, random type, equal probability)
+        if (spawnKeys.length > 0) {
+            // Pick one fresh non-special tile per column that has new tiles
+            const candidates = [];
+            for (let c = 0; c < COLS; c++) {
+                for (let r = 0; r < ROWS; r++) {
+                    if (board[r][c] && !board[r][c].special) { candidates.push({ r, c }); break; }
+                }
+            }
+            const shuffled = candidates.sort(() => Math.random() - 0.5);
+            const count = Math.min(spawnKeys.length, shuffled.length);
+            for (let i = 0; i < count; i++) {
+                const { r, c } = shuffled[i];
+                board[r][c].special = SPECIAL_TYPES[Math.floor(Math.random() * SPECIAL_TYPES.length)];
+            }
+        }
+
+        renderBoard();
+        checkCascadingMatches();
+    }
+
+    // FIX: Reset cascadeDepth and comboMultiplier when no further matches occur
+    function checkCascadingMatches() {
+        if (cascadeDepth >= MAX_CASCADE) { cascadeDepth = 0; comboMultiplier = 1; return; }
+
+        let matches = [];
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS - 2; c++) {
+                const color = board[r][c] && board[r][c].color;
+                if (color &&
+                    board[r][c+1] && board[r][c+1].color === color &&
+                    board[r][c+2] && board[r][c+2].color === color &&
+                    !board[r][c].special && !board[r][c+1].special && !board[r][c+2].special)
+                    matches.push({ r, c }, { r, c: c+1 }, { r, c: c+2 });
+            }
+        }
+        for (let c = 0; c < COLS; c++) {
+            for (let r = 0; r < ROWS - 2; r++) {
+                const color = board[r][c] && board[r][c].color;
+                if (color &&
+                    board[r+1][c] && board[r+1][c].color === color &&
+                    board[r+2][c] && board[r+2][c].color === color &&
+                    !board[r][c].special && !board[r+1][c].special && !board[r+2][c].special)
+                    matches.push({ r, c }, { r: r+1, c }, { r: r+2, c });
+            }
+        }
+
+        if (matches.length > 0) {
+            cascadeDepth++;
+            comboMultiplier++;
+            comboEl.innerText = `COMBO x${comboMultiplier}!`;
+            comboEl.style.transform = 'scale(1.2)';
+            setTimeout(() => comboEl.style.transform = 'scale(1)', 150);
+
+            const unique = Array.from(new Set(matches.map(m => `${m.r},${m.c}`))).map(s => {
+                const [r, c] = s.split(',').map(Number); return { r, c };
+            });
+            score += unique.length * 20 * comboMultiplier;
+            scoreEl.innerText = score;
+            unique.forEach(p => {
+                const el = getTileEl(p.r, p.c);
+                if (el) el.classList.add('clearing');
+                board[p.r][p.c] = null;
+            });
+            setTimeout(() => cascade([]), 300);
+        } else {
+            // FIX: No further matches — reset cascade/combo state
+            cascadeDepth   = 0;
+            comboMultiplier = 1;
+        }
+    }
+
+    function renderBoard() {
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                const el   = getTileEl(r, c);
+                const cell = board[r][c];
+                el.className = 'tile';
+                if (cell) {
+                    el.style.backgroundColor = `var(--${cell.color})`;
+                    applySpecialClasses(el, cell);
+                } else {
+                    el.style.backgroundColor = 'transparent';
+                }
+            }
+        }
+    }
+
+    function resetPath() {
+        path.forEach(p => {
+            const el = getTileEl(p.r, p.c);
+            if (el) el.classList.remove('active', 'loop-active');
+        });
+        path = []; isLoop = false; isDragging = false; backtrackCount = 0;
+        currentChainColor = null; usedTransitionTiles = new Set();
+        pendingTransitionSpecial = null;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawPath() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (path.length < 2) return;
+        ctx.beginPath();
+        ctx.strokeStyle = isLoop ? 'white' : 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        path.forEach((p, i) => {
+            const el = getTileEl(p.r, p.c);
+            const x = el.offsetLeft + el.offsetWidth / 2;
+            const y = el.offsetTop  + el.offsetHeight / 2;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
+    gridElement.addEventListener('mousedown', startDrag);
+    gridElement.addEventListener('touchstart', startDrag);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', (e) => { e.preventDefault(); handleMove(e); }, { passive: false });
+    window.addEventListener('mouseup', resolveMatch);
+    window.addEventListener('touchend', resolveMatch);
+    restartBtn.addEventListener('click', resetGame);
+    startBtn.addEventListener('click', () => { startScreen.style.display = 'none'; initBoard(); });
+    window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>
